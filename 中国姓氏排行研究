@@ -1,0 +1,154 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+import warnings
+warnings.filterwarnings('ignore') 
+# 不发出警告
+
+from bokeh.io import output_notebook
+output_notebook()
+# 导入notebook绘图模块
+
+from bokeh.plotting import figure,show
+from bokeh.models import ColumnDataSource
+# 导入图表绘制、图标展示模块
+# 导入ColumnDataSource模块
+
+data01 = pd.read_csv(r'E:\桌面\项目数据\项目09中国姓氏排行研究\项目09中国姓氏排行研究\data01.csv')
+data02 = pd.read_csv(r'E:\桌面\项目数据\项目09中国姓氏排行研究\项目09中国姓氏排行研究\data02.csv')
+data = pd.concat([data01,data02])
+
+
+location = pd.read_excel(r'E:\桌面\项目数据\项目09中国姓氏排行研究\项目09中国姓氏排行研究\中国行政代码对照表.xlsx')
+data['户籍地城市编号']=pd.to_numeric(data['户籍地城市编号'],errors='coerce')  #修改数据类型
+
+data = pd.merge(data,location,left_on='户籍地城市编号',right_on = '行政编码')  
+data['工作地'] = data['工作地'].str[:15]
+del data['户籍地城市编号']
+del data['行政编码']
+
+
+#新建字段“工作地-省”，“工作地-市”，“工作地-区县”,如果数据中“工作地”字段无法提取省和市，则用“未识别”填充单元格
+#省
+data['工作地_省'] = data['工作地'].str.split('省').str[0]
+
+#市
+data['工作地_市'] = data['工作地'].str.split('省').str[1].str.split('市').str[0]             
+data['工作地_市'][data['工作地_省'].str.len() > 5] = data['工作地_省'].str.split('市').str[0]  
+
+#区县
+data['工作地_区县'] = ''
+data['工作地_区县'][(data['工作地_市'].str.len()<5)&(data['工作地'].str.contains('区'))]=data['工作地'].str.split('市').str[1].str.split('区').str[0]+'区'
+data['工作地_区县'][(data['工作地_市'].str.len()>5)&(data['工作地'].str.contains('区'))]=data['工作地'].str.split('市').str[0]+'区'
+
+data['工作地_区县'][(data['工作地_市'].str.len()<5)&(data['工作地'].str.contains('县'))]=data['工作地'].str.split('市').str[1].str.split('县').str[0]+'县'
+data['工作地_区县'][(data['工作地_市'].str.len()>5)&(data['工作地'].str.contains('县'))]=data['工作地'].str.split('县').str[0]+'县'
+
+#清理异常数据
+data['工作地_省'][(data['工作地_省'].str.len()>5)] = '未识别'
+data['工作地_市'][(data['工作地_市'].str.len()>5)] = '未识别'
+data['工作地_区县'][(data['工作地_区县'].str.len()>5) | (data['工作地_区县'].str.len()<2)] = '未识别'
+
+data.columns = ['姓','工作地','户籍所在地_省','户籍所在地_市','户籍所在地_区县','户籍所在地_lng','户籍所在地_lat',
+              '工作地_省','工作地_市','工作地_区县']
+print('读取数据为：',len(data),'条')
+
+
+#统计不同姓氏的总数,筛选出top20
+name_count = data['姓'].value_counts()[:20]
+
+#计算不同姓氏的占比
+result01 = pd.DataFrame({'count':name_count,'count_pre':name_count/name_count.sum()}) 
+result01
+
+# bokeh出联动柱状图
+
+#导入相关模块
+from bokeh.models import HoverTool
+from bokeh.layouts import gridplot
+
+# 创建数据
+
+name_list = result01.index.tolist()
+source = ColumnDataSource(result01)
+# 中国姓氏top20
+hover01 = HoverTool(tooltips=[('姓氏计数','@count')])
+p1 = figure(plot_width=800,plot_height=300,x_range=name_list,tools=[hover01,'reset,xwheel_zoom,pan,crosshair'],title='中国姓氏top20')
+p1.vbar(x='index',top='count',source=source,width=0.8)
+p1.ygrid.grid_line_dash = [6, 4]
+p1.xgrid.grid_line_dash = [6, 4]
+show(p1)
+
+# 中国姓氏占比top20
+hover02 = HoverTool(tooltips=[('姓氏占比','@count_pre')])
+p2 = figure(plot_width=800,plot_height=300,x_range=name_list,tools=[hover02,'reset,xwheel_zoom,pan,crosshair'],title='中国姓氏占比top20')
+p2.vbar(x='index',top='count_pre',source=source,width=0.8,color='red')
+p2.ygrid.grid_line_dash = [6, 4]
+p2.xgrid.grid_line_dash = [6, 4]
+show(p2)
+
+#图表联动
+p_totall=gridplot([[p1],[p2]])
+show(p_totall)
+
+
+# 老王
+
+data_wang1 = data[data['姓'] == '王']
+data_wang1.to_excel(r'C:\Users\lijiangyuan\Desktop\wang01.xlsx',index=False)
+# 导出数据1
+
+data_wang2 = data_wang1.groupby(['姓','户籍所在地_lng','户籍所在地_lat'])['户籍所在地_市'].count()
+data_wang2 = data_wang2.reset_index()
+data_wang2.columns = ['name','lng','lat','value']
+data_wang2.to_excel(r'C:\Users\lijiangyuan\Desktop\wang02.xlsx',index=False)
+
+# 导出数据2
+
+print('导出完成！')
+
+
+# 老姬
+data_ji1 = data[data['姓'] == '姬']
+data_ji1.to_excel(r'C:\Users\lijiangyuan\Desktop\ji01.xlsx',index=False)
+# 导出数据1
+
+data_ji2 = data_ji1.groupby(['姓','户籍所在地_lng','户籍所在地_lat'])['户籍所在地_市'].count()
+data_ji2 = data_ji2.reset_index()
+data_ji2.columns = ['name','lng','lat','value']
+data_ji2.to_excel(r'C:\Users\lijiangyuan\Desktop\ji02.xlsx',index=False)
+# 导出数据2
+
+print('导出完成！')
+
+
+
+#转换老王为json
+data = pd.read_excel(r'C:\Users\lijiangyuan\Desktop\wang02.xlsx')
+
+datajs = data.to_json(orient='records',force_ascii=False)
+
+print('转换后数据为：\n',datajs) #转换为json数据
+
+
+# 转换老姬为json
+data = pd.read_excel(r'C:\Users\lijiangyuan\Desktop\ji02.xlsx')
+
+datajs = data.to_json(orient='records',force_ascii=False)
+
+print('转换后数据为：\n',datajs) #转换为json数据
+
+
+
+# 计算并查看“汤”姓氏的奔波指数
+data_tang = data[['姓','户籍所在地_lng','户籍所在地_lat','工作地_市','工作地_区县']][data['姓']=='汤']
+data_tang = data_tang[data_tang['工作地_市'] != '未识别']
+data_tang = data_tang[data_tang['工作地_区县'] != '未识别']
+data_tang.columns = ['firstName','birth_lng','birth_lat','work_city','work_district']
+
+#导出数据
+data_tang.to_excel(r'E:\桌面\项目实战\项目09_中国姓氏排行研究\tang.xlsx',index=False)
+
+print(len(data_tang))
