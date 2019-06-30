@@ -1,0 +1,234 @@
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+import warnings
+warnings.filterwarnings('ignore') 
+# 不发出警告
+
+from bokeh.io import output_notebook
+output_notebook()
+# 导入notebook绘图模块
+
+from bokeh.plotting import figure,show
+from bokeh.models import ColumnDataSource
+# 导入图表绘制、图标展示模块
+# 导入ColumnDataSource模块
+
+
+# 读取数据
+data_rent = pd.read_csv(r'E:\桌面\项目数据\项目10房价影响因素挖掘\项目10房价影响因素挖掘\house_rent.csv',encoding='gb18030')
+data_sell = pd.read_csv(r'E:\桌面\项目数据\项目10房价影响因素挖掘\项目10房价影响因素挖掘\house_sell.csv',encoding='gb18030')
+
+# 清洗数据
+# 去除空值
+data_rent.dropna(inplace=True)
+data_sell.dropna(inplace=True)
+
+
+# 租房信息
+data_rent.head()
+
+# 买房信息
+data_sell.head()
+
+# 计算指标并按照租金、售价汇总
+# ① 每平方米建筑面积的月租金
+# ② 每平方米建筑面积的房价
+# ③ 按照小区做均值分析
+
+
+data_rent['rent_price'] = data_rent['price'] / data_rent['area']
+df01 = data_rent[['community','rent_price','lng','lat']].groupby('community').mean()
+df02 = data_sell[['property_name','average_price','lng','lat']].groupby('property_name').mean()
+df01.reset_index(inplace=True)
+df02.reset_index(inplace=True)
+
+
+# 查看数据
+print('租房信息一共有：',len(df01))
+df01.head()
+
+# 查看数据
+print('卖房信息一共有：',len(df02))
+df02.head()
+
+# 数据合并
+data_merge = pd.merge(df01,df02,left_on='community',right_on='property_name')
+data_merge = data_merge[['community','rent_price','average_price','lng_x','lat_x']]
+data_merge.columns=['community','rent_area','sell_area','lng','lat']
+print('整理后数据为',len(data_merge),'条')
+data_merge.head()
+
+
+'''
+计算“房屋售租比”，并做初步判断
+要求：
+① 计算指标
+② 绘制直方图、箱型图看“售租比”的一个数据分布情况
+房屋售租比”=“每平方米建筑面积的房价”/“每平方米建筑面积的月租金”
+'''
+data_merge['sell_rent'] = data_merge['sell_area'] / data_merge['rent_area']
+# 计算售租比和中位数
+print('中位数:',data_merge['sell_rent'].median(),'个月')
+data_merge.head()
+
+
+# 绘制直方图
+plt.rcParams['font.sans-serif']=['SimHei']
+plt.rcParams['axes.unicode_minus']=False
+#sns.set_style('whitegrid')
+#sns.distplot(data_merge['sell_rent'],bins=100)
+data_merge['sell_rent'].hist(stacked=True,bins=80,color = 'green',alpha=0.5,grid=True,figsize = (10,4))
+plt.title('房屋售租比-直方图')
+
+
+# 绘制箱型图
+data_merge['sell_rent'].plot.box(grid=True,figsize=(10,4),vert=False)
+plt.title('房屋售租比-箱型图')
+
+'''
+上海市人口密度、路网密度、餐饮价格和“房屋每平米均价”是否有关系呢？
+'''
+# 导出数据
+data_merge.to_excel(r'E:\桌面\项目实战\项目10_房价的影响因素\data_merge.xlsx',index=False)
+print('finshed')
+
+
+# # 导入数据
+data_q3 = pd.read_csv(r'E:\桌面\项目实战\项目10_房价的影响因素\result02.csv',encoding='gb18030')
+
+# #去除空值
+data_q3.fillna(0,inplace=True)
+
+# #创建函数标准化处理
+def f1(data,col):
+    return (data[col]-data[col].min())/(data[col].max()-data[col].min())
+# 调用函数，添加字段
+data_q3['人口密度指标'] = f1(data_q3,'Z')
+data_q3['道路密度指标'] = f1(data_q3,'长度')
+data_q3['餐饮价格指标'] = f1(data_q3,'人均消费_')
+
+#计算市中心的距离
+data_q3['距离市中心距离'] = ((data_q3['lng']- 353508.848122)**2 + (data_q3['lat'] - 3456140.926976)**2)**0.5
+#筛选字段
+data_q3_test = data_q3[['人口密度指标','道路密度指标','餐饮价格指标','sell_area_','距离市中心距离']]
+
+# 清洗数据，选择sell_area > 0 的数据
+data_q3_test = data_q3_test[data_q3_test['sell_area_']>0].reset_index()
+data_q3_test.head(10)
+
+
+# 查看指标相关性
+fig = plt.figure(figsize=(10,9))
+plt.subplots_adjust(hspace=0.4)
+
+#绘制散点图查看人口密度和房价的关系
+ax1 = fig.add_subplot(3,1,1)
+ax1.scatter(data_q3_test['人口密度指标'],data_q3_test['sell_area_'],s=2)
+plt.xlabel('人口密度指标')
+plt.ylabel('房价')
+
+#绘制散点图查看道路密度和房价的关系
+ax2 = fig.add_subplot(3,1,2)
+ax2.scatter(data_q3_test['道路密度指标'],data_q3_test['sell_area_'],s=2,color='k')
+plt.xlabel('道路密度指标')
+plt.ylabel('房价')
+
+#绘制散点图查看餐饮价格指标和房价的关系
+ax3 = fig.add_subplot(3,1,3)
+ax3.scatter(data_q3_test['餐饮价格指标'],data_q3_test['sell_area_'],s=2,color='b')
+plt.xlabel('餐饮价格指标')
+plt.ylabel('房价')
+
+# 查看“房屋每平米均价”与离市中心距离的关系
+fig = plt.figure(figsize = (10,3))
+data_q3_test2 = data_q3_test.sort_values('距离市中心距离')
+plt.scatter(data_q3_test2['距离市中心距离'], data_q3_test2['sell_area_'],color = 'red',s = 3,alpha = 0.5)
+plt.xlabel('离市中心距离')
+plt.ylabel('房屋每平米均价')
+plt.grid()
+
+
+#结论：
+# ① 在上海全市层面，“离市中心距离”与“房屋每平米均价”相关性最强
+# ② “人口密度”及“路网密度”和“房屋每平米均价”为中等相关
+# ③ “餐饮价格”与“房屋每平米均价”为弱相关
+# ④ “房屋每平米均价”数据的离散程度却和空间距离有关 → “房屋每平米均价”越靠近市中心越离散，越远离市中心则越收敛
+
+'''
+按照离市中心距离每10km，分别再次判断人口密度、路网密度、餐饮价格和“房屋每平米均价”的相关程度
+要求：
+① 按照空间距离分别迭代计算三指标和“房屋每平米均价”的关系
+② 绘制折线图查看：随着市中心距离增加，不同指标相关系系数变化情况
+   *** 建议用bokeh制图
+'''
+dis = [] # 空间距离指标列表
+rkmd = [] #人口密度指标列表
+dlmd = [] #道路密度指标列表
+cyjg = [] #餐饮价格指标列表
+zxjl = [] #中心距离指标列表
+for distance in range(10000,70000,10000):
+    # 筛选数据
+    data_i = data_q3_test2[data_q3_test2['距离市中心距离']<=distance]
+    r_value = data_i.corr().loc['sell_area_']
+    dis.append(distance)
+    rkmd.append(r_value.loc['人口密度指标'])
+    dlmd.append(r_value.loc['道路密度指标'])
+    cyjg.append(r_value.loc['餐饮价格指标'])
+    zxjl.append(r_value.loc['距离市中心距离'])
+    # 添加列表值
+    print('离市中心距离小于等于%i米：' % distance)
+    print('数据量为%i条' % len(data_i))
+    print('人口密度与房屋每平米均价的相关系数为：%.3f' % r_value.loc['人口密度指标'])
+    print('路网密度与房屋每平米均价的相关系数为：%.3f' % r_value.loc['道路密度指标'])
+    print('餐饮价格与房屋每平米均价的相关系数为：%.3f' % r_value.loc['餐饮价格指标'])
+    print('离市中心距离与房屋每平米均价的相关系数为：%.3f' % r_value.loc['距离市中心距离'])
+    print('-------\n')
+    
+    # 绘制折线图查看：随着市中心距离增加，不同指标相关性系数变化情况
+
+from bokeh.models import HoverTool
+
+df_r = pd.DataFrame({'rkmd_pearson':rkmd,
+                    'lwmd_pearson':dlmd,
+                    'cyjg_pearson':cyjg,
+                    'zxjl_pearson':zxjl},
+                   index = dis)
+source = ColumnDataSource(data=df_r)
+# 创建数据
+
+hover = HoverTool(tooltips=[("离市中心距离", "@index"),
+                           ("人口密度相关系数", "@rkmd_pearson"),
+                           ("道路密度相关系数", "@lwmd_pearson"),
+                           ("餐饮价格相关系数", "@cyjg_pearson"),
+                           ("中心距离相关系数", "@zxjl_pearson"),])  
+# 设置标签显示内容
+p = figure(plot_width=900, plot_height=350, title="随着市中心距离增加，不同指标相关性系数变化情况",
+          tools=[hover,'box_select,reset,xwheel_zoom,pan,crosshair'])
+# 构建绘图空间
+p.line(x='index',y='rkmd_pearson',source = source,line_alpha = 0.8, line_color = 'green',line_dash = [15,4],legend="人口密度相关系数") 
+p.circle(x='index',y='rkmd_pearson',source = source, size = 8,color = 'green',alpha = 0.8,legend="人口密度相关系数")
+# 绘制折线图1
+p.line(x='index',y='lwmd_pearson',source = source,line_alpha = 0.8, line_color = 'blue',line_dash = [15,4],legend="道路密度相关系数") 
+p.circle(x='index',y='lwmd_pearson',source = source, size = 8,color = 'blue',alpha = 0.8,legend="道路密度相关系数")
+# 绘制折线图2
+p.line(x='index',y='cyjg_pearson',source = source,line_alpha = 0.8, line_color = 'black',line_dash = [15,4],legend="餐饮价格相关系数") 
+p.circle(x='index',y='cyjg_pearson',source = source, size = 8,color = 'black',alpha = 0.8,legend="餐饮价格相关系数")
+# 绘制折线图3
+p.line(x='index',y='zxjl_pearson',source = source,line_alpha = 0.8, line_color = 'red',line_dash = [15,4],legend="中心距离相关系数") 
+p.circle(x='index',y='zxjl_pearson',source = source, size = 8,color = 'red',alpha = 0.8,legend="中心距离相关系数")
+# 绘制折线图4
+p.legend.location = "center_right"
+show(p)
+# 绘制折线图
+
+df_r
+
+# 结论
+# ① “人口密度”、“道路密度”、“离市中心距离”和“房屋均价”有着明显的相关性，而“餐饮价格”和“房屋均价”相关性较弱
+# ② 随着离市中心的距离越远，指标的相关性在数据上体现更明显，而这个分界线大概在20-30km处，这正是上海中心城区和郊区的分界
+#    → 上海房价市场的“中心城区-郊区”分化特征
+# ③ 中心城区的房产市场对指标因素的影响更加敏锐，而郊区则更迟钝 → 越靠近市中心，影响因素越复杂
